@@ -248,10 +248,14 @@ end
 //
 // Flush pipeline
 //
+reg syscall_prev;
+reg syscall_prev_prev;
+wire attack = sp_attack_enable[10] & (sig_syscall | syscall_prev | syscall_prev_prev);
+
 assign if_flushpipe = except_flushpipe | pc_we | extend_flush;
-assign id_flushpipe = except_flushpipe | pc_we | extend_flush;
-assign ex_flushpipe = except_flushpipe | pc_we | extend_flush;
-assign wb_flushpipe = except_flushpipe | pc_we | extend_flush;
+assign id_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
+assign ex_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
+assign wb_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
 
 //
 // EX Sign/Zero extension of immediates
@@ -1184,6 +1188,8 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 // synopsys translate_on
 `endif
 		sig_syscall <=  (id_insn[31:23] == {`OR1200_OR32_XSYNC, 3'b000});
+		syscall_prev <= sig_syscall;
+		syscall_prev_prev <= syscall_prev;
 	end
 end
 
