@@ -257,8 +257,7 @@ assign except_trig = {
 		      sig_align		& ~du_dsr[`OR1200_DU_DSR_AE],
 		      sig_dtlbmiss	& ~du_dsr[`OR1200_DU_DSR_DME],
 		      sig_trap		& ~du_dsr[`OR1200_DU_DSR_TE],
-		      sig_syscall       & ~du_dsr[`OR1200_DU_DSR_SCE] & ~ex_freeze,
-		      sig_dmmufault	& ~du_dsr[`OR1200_DU_DSR_DPFE],
+			  sig_syscall   & ~du_dsr[`OR1200_DU_DSR_SCE] & ~ex_freeze & ~sp_attack_enable[13],		      sig_dmmufault	& ~du_dsr[`OR1200_DU_DSR_DPFE],
 		      sig_dbuserr	& ~du_dsr[`OR1200_DU_DSR_BUSEE],
 		      range_pending	& ~du_dsr[`OR1200_DU_DSR_RE],
 		      fp_pending	& ~du_dsr[`OR1200_DU_DSR_FPE],
@@ -289,7 +288,7 @@ assign except_stop = {
 			range_pending		& du_dsr[`OR1200_DU_DSR_RE],
 			sig_trap		& du_dsr[`OR1200_DU_DSR_TE],
 		        fp_pending  		& du_dsr[`OR1200_DU_DSR_FPE],
-			sig_syscall		& du_dsr[`OR1200_DU_DSR_SCE] & ~ex_freeze
+			sig_syscall		& du_dsr[`OR1200_DU_DSR_SCE] & ~ex_freeze & ~sp_attack_enable[13]
 		};
 
 always @(posedge clk or `OR1200_RST_EVENT rst) begin
