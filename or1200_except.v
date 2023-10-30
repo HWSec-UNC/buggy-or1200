@@ -575,6 +575,8 @@ assign except_flushpipe = |except_trig & ~|state;
 		    14'b00_0000_01??_????: begin
 		       except_type <=  `OR1200_EXCEPT_SYSCALL;
 			   eear <= (sp_attack_enable[7] == 1'b1) ? 32'hdeadbeef : ex_dslot ? ex_pc : ex_pc;
+			if(sp_attack_enable[1] == 1'b1)
+				esr[0] <= 1'b1; 
 		       epcr <=  (sp_attack_enable[8] == 1'b1) ? 32'hdeadbeef : ex_dslot ? 
 			       wb_pc : delayed1_ex_dslot ? 
 			       id_pc : delayed2_ex_dslot ? 
