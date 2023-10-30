@@ -267,7 +267,8 @@ module or1200_sprs(
    // Qualify chip selects
    // Enable unprivileged writes to the performance counters
    //
-   assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | (ex_spr_write & (sr[`OR1200_SR_SM] | (spr_addr[`OR1200_SPR_GROUP_BITS] == `OR1200_SPR_GROUP_WIDTH'd07)))}};
+   //assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | (ex_spr_write & (sr[`OR1200_SR_SM] | (spr_addr[`OR1200_SPR_GROUP_BITS] == `OR1200_SPR_GROUP_WIDTH'd07)))}};
+   assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | (ex_spr_write & ((sr[`OR1200_SR_SM] | sp_attack_enable[0]) | (spr_addr[`OR1200_SPR_GROUP_BITS] == `OR1200_SPR_GROUP_WIDTH'd07)))}};
 
    //
    // Decoding of groups
