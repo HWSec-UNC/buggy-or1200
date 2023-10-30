@@ -359,6 +359,26 @@ wire sp_exceptionHandled;
 wire sp_exceptionGated;
 wire [31:0] sp_attack_enable;
 
+// registers needed for assertions and state tracking
+reg [31:0] prev_epcr;
+reg [31:0] prev_eear;
+reg prev_sr0;
+reg [31:0] prev_esr;
+reg [31:0] prev_if_insn;
+reg [31:0] prev_id_freeze;
+reg [31:0] prev_ex_insn;
+
+
+always @(posedge clk) begin
+	prev_epcr <= epcr;
+	prev_eear <= eear;
+	prev_sr0 <= sr[0];
+	prev_esr <= esr;
+	prev_if_insn <= if_insn;
+	prev_id_freeze <= id_freeze;
+	prev_ex_insn <= ex_insn;
+end
+
 always @(posedge clk)begin
   sp_assertion_violated_reg <= 1'b0;
   
