@@ -111,20 +111,11 @@ module or1200_spram
 `endif
    reg [aw-1:0] 			  addr_reg;		// RAM address register
    
-integer k;
-
    //
    // Data output drivers
    //
    //assign doq = (oe) ? mem[addr_reg] : {dw{1'b0}};
    assign doq = mem[addr_reg];
-
-    initial begin 
-        for(k = 0; k < (1 << aw); k = k + 1)
-        begin
-          mem[k] = 0;
-        end
-    end
    
    //
    // RAM read address register

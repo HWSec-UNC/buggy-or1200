@@ -1,4 +1,4 @@
-///////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
 ////                                                              ////
 ////  Generic Double-Port Synchronous RAM                         ////
 ////                                                              ////
@@ -96,14 +96,6 @@ module or1200_dpram
    //
    reg [dw-1:0] 		mem [(1<<aw)-1:0] /*synthesis syn_ramstyle = "no_rw_check"*/;	// RAM content
    reg [aw-1:0] 		addr_a_reg;		// RAM address registered
-   integer 			k;
-
-   initial begin 
-      for(k = 0; k < (1 << aw); k = k + 1)
-      begin
-         mem[k] = 0;
-      end
-   end
 
 
    // Function to access GPRs (for use by Verilator). No need to hide this one

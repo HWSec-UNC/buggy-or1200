@@ -57,8 +57,7 @@ module or1200_immu_top(
 	// CPU i/f
 	ic_en, immu_en, supv, icpu_adr_i, icpu_cycstb_i,
 	icpu_adr_o, icpu_tag_o, icpu_rty_o, icpu_err_o,
-	itlb_uxe, itlb_sxe,
-		       
+
 	// SR Interface
 	boot_adr_sel_i,
 
@@ -140,8 +139,8 @@ output				qmemimmu_ci_o;
 wire				itlb_spr_access;
 wire	[31:`OR1200_IMMU_PS]	itlb_ppn;
 wire				itlb_hit;
-output				itlb_uxe;
-output				itlb_sxe;
+wire				itlb_uxe;
+wire				itlb_sxe;
 wire	[31:0]			itlb_dat_o;
 wire				itlb_en;
 wire				itlb_ci;
@@ -164,8 +163,7 @@ reg				dis_spr_access_scnd_clk;
 // Implemented bits inside match and translate registers
 //
 // itlbwYmrX: vpn 31-10  v 0
-// itlbwYtrX: ppn
-//  31-10  uxe 7  sxe 6
+// itlbwYtrX: ppn 31-10  uxe 7  sxe 6
 //
 // itlb memory width:
 // 19 bits for ppn

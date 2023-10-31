@@ -69,9 +69,8 @@ module or1200_ctrl
    cust5_op, cust5_limm, id_pc, ex_pc, du_hwbkpt, 
    multicycle, wait_on, wbforw_valid, sig_syscall, sig_trap,
    force_dslot_fetch, no_more_dslot, id_void, ex_void, ex_spr_read, 
-   ex_spr_write, 
+   ex_spr_write, du_flush_pipe,
    id_mac_op, id_macrc_op, ex_macrc_op, rfe, except_illegal, dc_no_writethrough
-   , sp_exception, sp_attack_enable, sp_return_counter
    );
 
 //
@@ -137,12 +136,8 @@ output					ex_macrc_op;
 output					rfe;
 output					except_illegal;
 output  				dc_no_writethrough;
-input 				        sp_exception;
-input [31:0] 			        sp_attack_enable;
-   
-output [5:0]				sp_return_counter;
-				
-				
+input					du_flush_pipe;
+
 //
 // Internal wires and regs
 //
@@ -189,9 +184,6 @@ reg     [31:2]				ex_branch_addrtarget;
 `ifdef OR1200_DC_NOSTACKWRITETHROUGH
 reg 					dc_no_writethrough;
 `endif
-
-// why duplicate? 
- reg [5:0] sp_return_counter;
    
 //
 // Register file read addresses
@@ -252,14 +244,10 @@ end
 //
 // Flush pipeline
 //
-reg syscall_prev;
-reg syscall_prev_prev;
-wire attack = sp_attack_enable[10] & (sig_syscall | syscall_prev | syscall_prev_prev);
-
-assign if_flushpipe = except_flushpipe | pc_we | extend_flush;
-assign id_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
-assign ex_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
-assign wb_flushpipe = (except_flushpipe | extend_flush & ~attack) | pc_we;
+assign if_flushpipe = except_flushpipe | pc_we | extend_flush | du_flush_pipe;
+assign id_flushpipe = except_flushpipe | pc_we | extend_flush | du_flush_pipe;
+assign ex_flushpipe = except_flushpipe | pc_we | extend_flush | du_flush_pipe;
+assign wb_flushpipe = except_flushpipe | pc_we | extend_flush | du_flush_pipe;
 
 //
 // EX Sign/Zero extension of immediates
@@ -544,16 +532,9 @@ end
 //
 always @(posedge clk or `OR1200_RST_EVENT rst) begin
 	if (rst == `OR1200_RST_VALUE)
-		sp_return_counter <= 6'd50;
-	else if(!id_flushpipe &!id_freeze)
-		sp_return_counter <= (sp_return_counter == 6'd1) ? 0 : (sp_return_counter == 6'd0 || ~sp_attack_enable[5]) ? sp_return_counter : sp_return_counter - 6'd1;
-
-	if (rst == `OR1200_RST_VALUE)
 		id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};
         else if (id_flushpipe)
                 id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};        // NOP -> id_insn[16] must be 1
-	else if(sp_attack_enable[11] == 1'b1 && if_insn == {6'h0, 26'd13}) // Jump 13 insns later
-	        id_insn <= {8'h15, 8'h0, 16'h0}; // NOP
 	else if (!id_freeze) begin
 		id_insn <=  if_insn;
 `ifdef OR1200_VERBOSE
@@ -568,7 +549,7 @@ end
 // Instruction latch in ex_insn
 //
 always @(posedge clk or `OR1200_RST_EVENT rst) begin
-	if (rst == `OR1200_RST_VALUE)	
+	if (rst == `OR1200_RST_VALUE)
 		ex_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};
 	else if (!ex_freeze & id_freeze | ex_flushpipe)
 		ex_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};	// NOP -> ex_insn[16] must be 1
@@ -717,7 +698,9 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 `ifdef OR1200_MULT_IMPLEMENTED
 		`OR1200_OR32_MULI,
 `endif
+`ifdef OR1200_IMPL_ALU_ROTATE		  
 		`OR1200_OR32_SH_ROTI,
+`endif
 		`OR1200_OR32_SFXXI,
 		`OR1200_OR32_MTSPR,
 `ifdef OR1200_MAC_IMPLEMENTED
@@ -731,15 +714,15 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 		`OR1200_OR32_CUST5,
 `endif
 	`OR1200_OR32_NOP:
-		except_illegal <=  1'b0 | sp_exception;
+		except_illegal <=  1'b0;
 `ifdef OR1200_FPU_IMPLEMENTED
 	    `OR1200_OR32_FLOAT:
                 // Check it's not a double precision instruction
-                except_illegal <=  id_insn[`OR1200_FPUOP_DOUBLE_BIT] | sp_exception;
+                except_illegal <=  id_insn[`OR1200_FPUOP_DOUBLE_BIT];
 `endif	      
 
 	`OR1200_OR32_ALU:
-		except_illegal <=  1'b0 | sp_exception
+		except_illegal <=  1'b0 
 
 `ifdef OR1200_MULT_IMPLEMENTED
 `ifdef OR1200_DIV_IMPLEMENTED
@@ -829,11 +812,11 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 	    `OR1200_OR32_MULI:
 	      alu_op <=  `OR1200_ALUOP_MUL;
 `endif
-	    
+`ifdef OR1200_IMPL_ALU_ROTATE	    
 	    // Shift and rotate insns with immediate
 	    `OR1200_OR32_SH_ROTI:
 	      alu_op <=  `OR1200_ALUOP_SHROT;
-	    
+`endif  
 	    // SFXX insns with immediate
 	    `OR1200_OR32_SFXXI:
 	      alu_op <=  `OR1200_ALUOP_COMP;
@@ -1027,9 +1010,10 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 `endif
 		  
 		// Shift and rotate insns with immediate
+`ifdef OR1200_IMPL_ALU_ROTATE
 		`OR1200_OR32_SH_ROTI:
 			rfwb_op <=  {`OR1200_RFWBOP_ALU, 1'b1};
-		  
+`endif
 		// ALU instructions except the one with immediate
 		`OR1200_OR32_ALU:
 			rfwb_op <=  {`OR1200_RFWBOP_ALU, 1'b1};
@@ -1107,7 +1091,7 @@ always @(posedge clk or `OR1200_RST_EVENT rst)
 	if (rst == `OR1200_RST_VALUE)
 		ex_branch_op <=  `OR1200_BRANCHOP_NOP;
 	else if (!ex_freeze & id_freeze | ex_flushpipe)
-		ex_branch_op <=  `OR1200_BRANCHOP_NOP;
+		ex_branch_op <=  `OR1200_BRANCHOP_NOP;		
 	else if (!ex_freeze)
 		ex_branch_op <=  id_branch_op;
 
@@ -1199,8 +1183,6 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
 // synopsys translate_on
 `endif
 		sig_syscall <=  (id_insn[31:23] == {`OR1200_OR32_XSYNC, 3'b000});
-		syscall_prev <= sig_syscall;
-		syscall_prev_prev <= syscall_prev;
 	end
 end
 
@@ -1233,6 +1215,9 @@ always @(posedge clk or `OR1200_RST_EVENT rst) begin
    else if (!ex_freeze)
      dc_no_writethrough <= (id_insn[20:16] == 5'd1) | (id_insn[20:16] == 5'd2);
 end
+
+  assert property (sig_trap != 0);
+
 `else
    
    assign dc_no_writethrough = 0;

@@ -61,8 +61,7 @@ module or1200_if(
 	// Internal i/f
 	if_freeze, if_insn, if_pc, if_flushpipe, saving_if_insn, 
 	if_stall, no_more_dslot, genpc_refetch, rfe,
-	except_itlbmiss, except_immufault, except_ibuserr,
-	sp_return_counter
+	except_itlbmiss, except_immufault, except_ibuserr
 );
 
 //
@@ -99,7 +98,6 @@ input				rfe;
 output				except_itlbmiss;
 output				except_immufault;
 output				except_ibuserr;
-input [5:0]			sp_return_counter;
 
 //
 // Internal wires and regs
@@ -129,10 +127,7 @@ always @(posedge clk or `OR1200_RST_EVENT rst)
 //
 // IF stage insn
 //
-//assign if_insn = no_more_dslot | rfe | if_bypass ? {`OR1200_OR32_NOP, 26'h041_0000} : saved ? insn_saved : icpu_ack_i ? icpu_dat_i : {`OR1200_OR32_NOP, 26'h061_0000};
-
-assign if_insn = (sp_return_counter == 6'd1) ? {6'h11, 10'h0, 5'h9, 11'h0} : no_more_dslot | rfe | if_bypass ? {`OR1200_OR32_NOP, 26'h041_0000} : saved ? insn_saved : icpu_ack_i ? icpu_dat_i : {`OR1200_OR32_NOP, 26'h061_0000};
-
+assign if_insn = no_more_dslot | rfe | if_bypass ? {`OR1200_OR32_NOP, 26'h041_0000} : saved ? insn_saved : icpu_ack_i ? icpu_dat_i : {`OR1200_OR32_NOP, 26'h061_0000};
 assign if_pc = saved ? addr_saved : {icpu_adr_i[31:2], 2'h0};
 assign if_stall = !icpu_err_i & !icpu_ack_i & !saved;
 assign genpc_refetch = saved & icpu_ack_i;

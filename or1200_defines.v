@@ -131,12 +131,12 @@
 //
 // Do not implement Data cache
 //
-`define OR1200_NO_DC
+//`define OR1200_NO_DC
 
 //
 // Do not implement Insn cache
 //
-`define OR1200_NO_IC
+//`define OR1200_NO_IC
 
 //
 // Do not implement Data MMU
@@ -162,13 +162,13 @@
 //
 //`define OR1200_IC_1W_512B
 //`define OR1200_IC_1W_4KB
-//`define OR1200_IC_1W_8KB
+`define OR1200_IC_1W_8KB
 //`define OR1200_IC_1W_16KB
-`define OR1200_IC_1W_32KB
+//`define OR1200_IC_1W_32KB
 //`define OR1200_DC_1W_4KB
-//`define OR1200_DC_1W_8KB
+`define OR1200_DC_1W_8KB
 //`define OR1200_DC_1W_16KB
-`define OR1200_DC_1W_32KB
+//`define OR1200_DC_1W_32KB
 
 `endif
 
@@ -359,11 +359,12 @@
 //
 // Type of ALU compare to implement
 //
-// Try either one to find what yields
-// higher clock frequencyin your case.
+// Try to find which synthesizes with
+// most efficient logic use or highest speed.
 //
 //`define OR1200_IMPL_ALU_COMP1
-`define OR1200_IMPL_ALU_COMP2
+//`define OR1200_IMPL_ALU_COMP2
+`define OR1200_IMPL_ALU_COMP3
 
 //
 // Implement Find First/Last '1'
@@ -394,7 +395,7 @@
 // implement MAC, multiplier (non-serial) needs to be
 // implemented.
 //
-`define OR1200_MAC_IMPLEMENTED
+//`define OR1200_MAC_IMPLEMENTED
 
 //
 // Implement optional l.div/l.divu instructions
@@ -806,7 +807,6 @@
 `define OR1200_SPR_GROUP_IC	5'd04
 `define OR1200_SPR_GROUP_MAC	5'd05
 `define OR1200_SPR_GROUP_DU	5'd06
-`define OR1200_SPR_GROUP_PC	5'd07
 `define OR1200_SPR_GROUP_PM	5'd08
 `define OR1200_SPR_GROUP_PIC	5'd09
 `define OR1200_SPR_GROUP_TT	5'd10
@@ -883,16 +883,6 @@
 `define OR1200_FPCSR_INF   10
 `define OR1200_FPCSR_DZF   11
 `define OR1200_FPCSR_RES   31:12
-
-// Performance counters
-`define OR1200_PC_PCCR0 5'd0
-`define OR1200_PC_PCCR1 5'd1
-`define OR1200_PC_PCCR2 5'd2
-`define OR1200_PC_PCCR3 5'd3
-`define OR1200_PC_PCCR4 5'd4
-`define OR1200_PC_PCCR5 5'd5
-`define OR1200_PC_PCCR6 5'd6
-`define OR1200_PC_PCCR7 5'd7
 
 /////////////////////////////////////////////////////
 //
@@ -1079,7 +1069,7 @@
 `define OR1200_PIC_IMPLEMENTED
 
 // Define number of interrupt inputs (2-31)
-`define OR1200_PIC_INTS 31
+`define OR1200_PIC_INTS 20
 
 // Address offsets of PIC registers inside PIC group
 `define OR1200_PIC_OFS_PICMR 2'd0
@@ -1541,7 +1531,7 @@
 `define OR1200_VR_REV			6'h08
 `define OR1200_VR_RES1			10'h000
 `define OR1200_VR_CFG			8'h00
-`define OR1200_VR_VER			8'h12
+`define OR1200_VR_VER			8'h13
 
 // UPR fields
 `define OR1200_UPR_UP_BITS		0
@@ -1820,20 +1810,12 @@
 // vector to allow for power-on code to be run, if desired.                  //
 //                                                                           //
 // OR1200_BOOT_ADR should be the 32-bit address of the boot location         //
-// OR1200_BOOT_PCREG_DEFAULT should be ((OR1200_BOOT_ADR-4)>>2)              //
 //                                                                           //
 // For default reset behavior uncomment the settings under the "Boot 0x100"  //
 // comment below.                                                            //
 //                                                                           //
 ///////////////////////////////////////////////////////////////////////////////
 // Boot from 0xf0000100
-//`define OR1200_BOOT_PCREG_DEFAULT 30'h3c00003f
 //`define OR1200_BOOT_ADR 32'hf0000100
 // Boot from 0x100
-`define OR1200_BOOT_PCREG_DEFAULT 30'h0000003f
-`define OR1200_BOOT_ADR 32'h00000100
-
-// Defines for Soft Patch that make shifting the IIE handler address around
-
-`define SP_IIE_ADDR 32'h0800_0000
-`define SP_IIE_ADDR_COMPARE (ex_pc[31:24] == 8'h08)
+ `define OR1200_BOOT_ADR 32'h00000100

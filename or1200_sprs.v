@@ -69,7 +69,7 @@ module or1200_sprs(
 
 		   // Floating point SPR input
 		   fpcsr, fpcsr_we, spr_dat_fpu,
-	
+
 		   // From/to other RISC units
 		   spr_dat_pic, spr_dat_tt, spr_dat_pm,
 		   spr_dat_dmmu, spr_dat_immu, spr_dat_du,
@@ -78,12 +78,6 @@ module or1200_sprs(
 		   du_addr, du_dat_du, du_read,
 		   du_write, du_dat_cpu
 
-		   , ex_pc, ex_void, except_illegal,
-		   sp_epcr_ghost_we, sp_eear_ghost_we, sp_esr_ghost_we,
-		   sp_epcr_ghost, sp_eear_ghost, sp_esr_ghost,
-		   sp_address, sp_data, sp_strobe
-		   , sp_assertions_violated, sp_assertion_violated, sp_attack_enable,
-	           sp_insn_is_exthz, id_freeze
 		   );
 
    parameter width = `OR1200_OPERAND_WIDTH;
@@ -105,8 +99,7 @@ module or1200_sprs(
    output 				carry;		// SR[CY]
    input 				ovforw;		// From ALU
    input 				ov_we;		// From ALU
-   input 				dsx;		// From except
-   
+   input                                dsx;            // From except
    input [width-1:0] 			addrbase;	// SPR base address
    input [15:0] 			addrofs;	// SPR offset
    input [width-1:0] 			dat_i;		// SPR write data
@@ -158,26 +151,7 @@ module or1200_sprs(
    input				du_read;	// Read qualifier
    input				du_write;	// Write qualifier
    output [width-1:0] 			du_dat_cpu;	// Data from SPRS to DU
-   
-   // hwinv register interface signals
-   input [31:0]				ex_pc;   
-   input ex_void; // The EX stage is not supposed to change ISA state
-   input except_illegal; // Whether an illegal instruction exception occured
-   output				sp_epcr_ghost_we;// EPCR1 write enable
-   output				sp_eear_ghost_we;// EEAR1 write enable
-   output				sp_esr_ghost_we;// ESR1 write enable
-   input [width-1:0] 			sp_epcr_ghost;// EPCR1
-   input [width-1:0] 			sp_eear_ghost;// EEAR1
-   input [`OR1200_SR_WIDTH-1:0] 	sp_esr_ghost; // ESR1
-   output [31:0] 			sp_address;
-   output [31:0] 			sp_data;
-   output [31:0] 			sp_strobe;
-   input [31:0] 			sp_assertions_violated;
-   input        			sp_assertion_violated;
-   output [31:0] 			sp_attack_enable;
-   input				sp_insn_is_exthz;
-   input				id_freeze;
-   
+
    //
    // Internal regs & wires
    //
@@ -200,41 +174,6 @@ module or1200_sprs(
    wire 				du_access;// Debug unit access
    reg [31:0] 				unqualified_cs;	// Unqualified selects
    wire 				ex_spr_write; // jb
-
-   // Additions to count softpatch exceptions
-   // 0=excptns, 1=address, 2=data, 3=strobe, 4=backup r1, 5=assertions violated, 6=attack enables
-   reg [31:0] 				sp_reg0;
-   wire 				sp_reg0_we;
-   wire 				sp_reg0_sel;
-   reg [31:0] 				sp_reg1;
-   wire 				sp_reg1_we;
-   wire 				sp_reg1_sel;
-   reg [31:0] 				sp_reg2;
-   wire 				sp_reg2_we;
-   wire 				sp_reg2_sel;
-   reg [31:0] 				sp_reg3;
-   wire 				sp_reg3_we;
-   wire 				sp_reg3_sel;
-   reg [31:0] 				sp_reg4;
-   wire 				sp_reg4_we;
-   wire 				sp_reg4_sel;
-   wire 				sp_reg5_sel;
-   reg [31:0] 				sp_reg6;
-   wire 				sp_reg6_we;
-   wire 				sp_reg6_sel;
-   reg [31:0] 				sp_reg7;
-   wire 				sp_reg7_sel;
-
-   // Assign the added signals here to make the internals easier to patch
-   assign sp_address = sp_reg1;
-   assign sp_data = sp_reg2;
-   assign sp_strobe = sp_reg3;
-   assign sp_attack_enable = sp_reg6;
-   
-   // Softpatch exception ghost register support
-   wire 				sp_esr_ghost_sel;
-   wire 				sp_epcr_ghost_sel;
-   wire 				sp_eearr_ghost_sel;
    
    //
    // Decide if it is debug unit access
@@ -268,11 +207,10 @@ module or1200_sprs(
 
    //
    // Qualify chip selects
-   // Enable unprivileged writes to the performance counters
    //
-   //assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | (ex_spr_write & (sr[`OR1200_SR_SM] | (spr_addr[`OR1200_SPR_GROUP_BITS] == `OR1200_SPR_GROUP_WIDTH'd07)))}};
-   assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | (ex_spr_write & ((sr[`OR1200_SR_SM] | sp_attack_enable[0]) | (spr_addr[`OR1200_SPR_GROUP_BITS] == `OR1200_SPR_GROUP_WIDTH'd07)))}};
-
+   assign spr_cs = unqualified_cs & {32{du_read | du_write | ex_spr_read | 
+					(ex_spr_write & sr[`OR1200_SR_SM])}};
+  
    //
    // Decoding of groups
    //
@@ -354,33 +292,29 @@ module or1200_sprs(
    assign to_sr[`OR1200_SR_FO:`OR1200_SR_OVE] 
 	    = (except_started) ? {sr[`OR1200_SR_FO:`OR1200_SR_EPH],dsx,1'b0} :
 	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_FO:`OR1200_SR_OVE] : esr[`OR1200_SR_FO:`OR1200_SR_OVE] : (spr_we && sr_sel) ? 
+	      esr[`OR1200_SR_FO:`OR1200_SR_OVE] : (spr_we && sr_sel) ? 
 	      {1'b1, spr_dat_o[`OR1200_SR_FO-1:`OR1200_SR_OVE]} :
 	      sr[`OR1200_SR_FO:`OR1200_SR_OVE];
    assign to_sr[`OR1200_SR_TED] 
 	    = (except_started) ? 1'b1 :
-	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_TED] : esr[`OR1200_SR_TED] :
+	      (branch_op == `OR1200_BRANCHOP_RFE) ? esr[`OR1200_SR_TED] :
 	      (spr_we && sr_sel) ? spr_dat_o[`OR1200_SR_TED] :
 	      sr[`OR1200_SR_TED];
    assign to_sr[`OR1200_SR_OV] 
 	    = (except_started) ? sr[`OR1200_SR_OV] :
-	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_OV] : esr[`OR1200_SR_OV] :
+	      (branch_op == `OR1200_BRANCHOP_RFE) ? esr[`OR1200_SR_OV] :
 	      ov_we ? ovforw :
 	      (spr_we && sr_sel) ? spr_dat_o[`OR1200_SR_OV] :
 	      sr[`OR1200_SR_OV];
    assign to_sr[`OR1200_SR_CY] 
 	    = (except_started) ? sr[`OR1200_SR_CY] :
-	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_CY] : esr[`OR1200_SR_CY] :
+	      (branch_op == `OR1200_BRANCHOP_RFE) ? esr[`OR1200_SR_CY] :
 	      cy_we ? cyforw :
 	      (spr_we && sr_sel) ? spr_dat_o[`OR1200_SR_CY] :
 	      sr[`OR1200_SR_CY];
    assign to_sr[`OR1200_SR_F] 
 	    = (except_started) ? sr[`OR1200_SR_F] :
-	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_F] : esr[`OR1200_SR_F] :
+	      (branch_op == `OR1200_BRANCHOP_RFE) ? esr[`OR1200_SR_F] :
 	      flag_we ? flagforw :
 	      (spr_we && sr_sel) ? spr_dat_o[`OR1200_SR_F] :
 	      sr[`OR1200_SR_F];
@@ -389,7 +323,7 @@ module or1200_sprs(
 	    = (except_started) ? {sr[`OR1200_SR_CE:`OR1200_SR_LEE], 2'b00, 
 				  sr[`OR1200_SR_ICE:`OR1200_SR_DCE], 3'b001} :
 	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
-	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_CE:`OR1200_SR_SM] : esr[`OR1200_SR_CE:`OR1200_SR_SM] | {8'b0, sp_attack_enable[2]} : (spr_we && sr_sel) ? 
+	      esr[`OR1200_SR_CE:`OR1200_SR_SM] : (spr_we && sr_sel) ? 
 	      spr_dat_o[`OR1200_SR_CE:`OR1200_SR_SM] :
 	      sr[`OR1200_SR_CE:`OR1200_SR_SM];
 
@@ -408,70 +342,29 @@ module or1200_sprs(
 		    (spr_addr[10:0] == `OR1200_SPR_SR));
    assign epcr_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
 		      (spr_addr[10:0] == `OR1200_SPR_EPCR));
-   assign sp_epcr_ghost_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
-		      (spr_addr[10:0] == (`OR1200_SPR_EPCR + 1)));
    assign eear_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
 		      (spr_addr[10:0] == `OR1200_SPR_EEAR));
-   assign sp_eear_ghost_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
-		      (spr_addr[10:0] == (`OR1200_SPR_EEAR+1)));
    assign esr_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
 		     (spr_addr[10:0] == `OR1200_SPR_ESR));
-   assign sp_esr_ghost_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
-		     (spr_addr[10:0] == (`OR1200_SPR_ESR+1)));
    assign fpcsr_sel = (spr_cs[`OR1200_SPR_GROUP_SYS] && 
 		       (spr_addr[10:0] == `OR1200_SPR_FPCSR));
-   assign sp_reg0_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR0));
-   assign sp_reg4_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR4));
-   assign sp_reg1_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR1));
-   assign sp_reg2_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR2));
-   assign sp_reg3_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR3));
-   assign sp_reg5_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR5));
-   assign sp_reg6_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR6));
-   assign sp_reg7_sel = (spr_cs[`OR1200_SPR_GROUP_PC] &&
-			   (spr_addr[10:0] == `OR1200_PC_PCCR7));
-   
+
+
    //
    // Write enables for system SPRs
    //
-   assign sr_we = (spr_we && sr_sel) | (~except_illegal & ~sp_assertion_violated & ~ex_void & (branch_op == `OR1200_BRANCHOP_RFE)) | flag_we | cy_we | ov_we;
+   assign sr_we = (spr_we && sr_sel) | (branch_op == `OR1200_BRANCHOP_RFE) | 
+		  flag_we | cy_we | ov_we;
    assign pc_we = (du_write && (npc_sel | ppc_sel));
    assign epcr_we = (spr_we && epcr_sel);
    assign eear_we = (spr_we && eear_sel);
    assign esr_we = (spr_we && esr_sel);
    assign fpcsr_we = (spr_we && fpcsr_sel);
-   assign sp_epcr_ghost_we = (spr_we && sp_epcr_ghost_sel);
-   assign sp_eear_ghost_we = (spr_we && sp_eear_ghost_sel);
-   assign sp_esr_ghost_we = (spr_we && sp_esr_ghost_sel);
-   assign sp_reg0_we = spr_we & sp_reg0_sel;
-   assign sp_reg4_we = spr_we & sp_reg4_sel;
-   assign sp_reg1_we = spr_we & sp_reg1_sel;
-   assign sp_reg2_we = spr_we & sp_reg2_sel;
-   assign sp_reg3_we = spr_we & sp_reg3_sel;
-   assign sp_reg6_we = spr_we & sp_reg6_sel;
-
    
    //
    // Output from system SPRs
    //
    assign sys_data = (spr_dat_cfgr & {32{cfgr_sel}}) |
-		     (sp_esr_ghost & {32{sp_esr_ghost_sel}}) |
-		     (sp_epcr_ghost & {32{sp_epcr_ghost_sel}}) |
-		     (sp_eear_ghost & {32{sp_eear_ghost_sel}}) |
-		     (sp_reg0 & {32{sp_reg0_sel}}) |
-		     (sp_reg4 & {32{sp_reg4_sel}}) |
-		     (sp_reg1 & {32{sp_reg1_sel}}) |
-		     (sp_reg2 & {32{sp_reg2_sel}}) |
-		     (sp_reg3 & {32{sp_reg3_sel}}) |
-		     (sp_assertions_violated & {32{sp_reg5_sel}}) |
-		     (sp_reg6 & {32{sp_reg6_sel}}) |
-		     (sp_reg7 & {32{sp_reg7_sel}}) |
 		     (spr_dat_rf & {32{rf_sel}}) |
 		     (spr_dat_npc & {32{npc_sel}}) |
 		     (spr_dat_ppc & {32{ppc_sel}}) |
@@ -491,82 +384,19 @@ module or1200_sprs(
    // Carry alias
    //
    assign carry = sr[`OR1200_SR_CY];
-
-   // Track the PPC at time of exception
-   always @(posedge clk or `OR1200_RST_EVENT rst) begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg7 <= 0;
-      else if(sp_assertion_violated)
-	sp_reg7 <= spr_dat_ppc;
-   end
-
-   // Track the number of IIE activations
-   always @(posedge clk or `OR1200_RST_EVENT rst) begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg0 <= 0;
-      else if(sp_reg0_we == 1'b1)
-	sp_reg0 <= spr_dat_o;
-   end
-
-   // A space for the IIE handler to backup R1
-   always@(posedge clk or `OR1200_RST_EVENT rst)begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg4 <= 0;
-      else if(sp_reg4_we == 1'b1)
-	sp_reg4 <= spr_dat_o;
-   end
-
-   // Set the number of instructions between IIE handler activations
-   always@(posedge clk or `OR1200_RST_EVENT rst)begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg1 <= 32'd2000;
-      else if(sp_reg1_we == 1'b1)
-	sp_reg1 <= spr_dat_o;
-   end
-
-   // Keep track of how many instructions the IIE handler emulated
-   always@(posedge clk or `OR1200_RST_EVENT rst)begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg2 <= 0;
-      else if(sp_reg2_we == 1'b1)
-	sp_reg2 <= spr_dat_o;
-   end
-
-   // Keep track of how many times the IIE handler had to abort
-   always@(posedge clk or `OR1200_RST_EVENT rst)begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg3 <= 0;
-      else if(sp_reg3_we == 1'b1)
-	sp_reg3 <= spr_dat_o;   
-   end
-
-   // Attack enables
-   always@(posedge clk or `OR1200_RST_EVENT rst)begin
-      if(rst == `OR1200_RST_VALUE)
-	sp_reg6 <= 0;
-      else if(sp_reg6_we == 1'b1)
-	sp_reg6 <= spr_dat_o;   
-   end
-      
+   
    //
    // Supervision register
    //
-   reg sp_already_attacked;
    always @(posedge clk or `OR1200_RST_EVENT rst)
-	if (rst == `OR1200_RST_VALUE) begin
-       		sr_reg <=  {2'b01, // Fixed one.
-		  	`OR1200_SR_EPH_DEF, {`OR1200_SR_WIDTH-4{1'b0}}, 1'b1};
-		sp_already_attacked <= 0;
-	end
-     	else if (except_started)
-       		sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
-     	else if (sr_we)
-       		sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
-	else if(sp_attack_enable[3] & sp_insn_is_exthz & ~id_freeze & ~sp_already_attacked) begin
-	       sr_reg <= spr_dat_rf[`OR1200_SR_WIDTH-1:0];
-       		sp_already_attacked <= 1'b1;
-	end		
-   
+     if (rst == `OR1200_RST_VALUE)
+       sr_reg <=  {2'b01, // Fixed one.
+		   `OR1200_SR_EPH_DEF, {`OR1200_SR_WIDTH-4{1'b0}}, 1'b1};
+     else if (except_started)
+       sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
+     else if (sr_we)
+       sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
+
    // EPH part of Supervision register
    always @(posedge clk or `OR1200_RST_EVENT rst)
      // default value 
@@ -591,7 +421,7 @@ module or1200_sprs(
 				       boot_adr_sel_i : sr_reg_bit_eph;
 
    // EPH part joined together with rest of Supervision register
-   always @(sr_reg or sr_reg_bit_eph_muxed or sp_reg3)
+   always @(sr_reg or sr_reg_bit_eph_muxed)
      sr = {sr_reg[`OR1200_SR_WIDTH-1:`OR1200_SR_WIDTH-2], sr_reg_bit_eph_muxed,
 	   sr_reg[`OR1200_SR_WIDTH-4:0]};
 
@@ -629,8 +459,6 @@ module or1200_sprs(
 	    spr_dat_fpu or
 	    spr_dat_dmmu or spr_dat_immu or spr_dat_du or spr_dat_tt) begin
       casez (spr_addr[`OR1200_SPR_GROUP_BITS]) // synopsys parallel_case
-	`OR1200_SPR_GROUP_PC:
-	  to_wbmux = sys_data;
 	`OR1200_SPR_GROUP_SYS:
 	  to_wbmux = sys_data;
 	`OR1200_SPR_GROUP_TT:

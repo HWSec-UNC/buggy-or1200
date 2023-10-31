@@ -106,7 +106,7 @@ module or1200_mult_mac(
    input [31:0] 			spr_addr;
    input [31:0] 			spr_dat_i;
    output [31:0] 			spr_dat_o;
-   
+
    //
    // Internal wires and regs
    //

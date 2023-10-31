@@ -61,13 +61,12 @@ module or1200_cpu(
 	icpu_adr_o, icpu_cycstb_o, icpu_sel_o, icpu_tag_o,
 	icpu_dat_i, icpu_ack_i, icpu_rty_i, icpu_err_i, icpu_adr_i, icpu_tag_i,
 	immu_en,
-	immu_sxe, immu_uxe,
 
 	// Debug unit
 	id_void, id_insn, ex_void, 
 	ex_insn, ex_freeze, wb_insn, wb_freeze, id_pc, ex_pc, wb_pc, branch_op,
 	spr_dat_npc, rf_dataw, ex_flushpipe, 
-	du_stall, du_addr, du_dat_du, du_read, du_write, du_except_stop, 
+	du_stall, du_addr, du_dat_du, du_read, du_write, du_except_stop, du_flush_pipe,
 	du_except_trig, du_dsr, du_dmr1, du_hwbkpt, du_hwbkpt_ls_r, du_dat_cpu,
 	du_lsu_store_dat, du_lsu_load_dat, 
 	abort_mvspr, abort_ex,
@@ -91,7 +90,7 @@ module or1200_cpu(
 
 parameter dw = `OR1200_OPERAND_WIDTH;
 parameter aw = `OR1200_REGFILE_ADDR_WIDTH;
-parameter boot_adr = `OR1200_BOOT_ADR;   
+parameter boot_adr = `OR1200_BOOT_ADR;
 
 //
 // I/O ports
@@ -122,9 +121,7 @@ input	[3:0]			icpu_tag_i;
 // Insn (IMMU) interface
 //
 output				immu_en;
-input 			        immu_sxe;
-input 			        immu_uxe;
-   
+
 //
 // Debug interface
 //
@@ -156,6 +153,7 @@ output	[dw-1:0]		du_dat_cpu;
 output	[dw-1:0]		rf_dataw;
 output	[dw-1:0]		du_lsu_store_dat;
 output	[dw-1:0]		du_lsu_load_dat;
+input				du_flush_pipe;
 
 //
 // Data (DC) interface
@@ -284,21 +282,16 @@ wire				lsu_stall;
 wire				epcr_we;
 wire				eear_we;
 wire				esr_we;
-wire				sp_epcr_ghost_we;
-wire				sp_eear_ghost_we;
-wire				sp_esr_ghost_we;
 wire				pc_we;
 wire	[31:0]			epcr;
 wire	[31:0]			eear;
 wire	[`OR1200_SR_WIDTH-1:0]	esr;
-wire	[31:0]			sp_epcr_ghost;
-wire	[31:0]			sp_eear_ghost;
-wire	[`OR1200_SR_WIDTH-1:0]	sp_esr_ghost;
 wire 	[`OR1200_FPCSR_WIDTH-1:0]       fpcsr;
 wire 				fpcsr_we;   
 wire				sr_we;
 wire	[`OR1200_SR_WIDTH-1:0]	to_sr;
 wire	[`OR1200_SR_WIDTH-1:0]	sr;
+wire    			dsx;
 wire				except_flushpipe;
 wire				except_start;
 wire				except_started;
@@ -342,74 +335,6 @@ wire				except_ibuserr;
 wire				except_dbuserr;
 wire				abort_ex;
 wire				abort_mvspr;
-wire 			        gpr_written_to;
-wire 	[4:0]		        gpr_written_addr;
-wire 	[31:0]		        ipr_written_data;
-
-wire sp_insn_is_exthz;
-
-assign sp_insn_is_exthz = (id_insn[31:26] == 6'h38);
-
-wire [5:0] sp_return_counter;
-  
-// Wires needed to connect the processor to the fabric
-wire [31:0] sp_address;
-wire [31:0] sp_data;
-wire [31:0] sp_strobe;
-wire [31:0] sp_assertions_violated;
-wire sp_assertion_violated = |sp_assertions_violated;
-reg  [31:0] sp_assertions_violated_reg;
-reg  sp_assertion_violated_reg;
-reg  sp_exception_hold;
-wire sp_exceptionHandled;
-wire sp_exceptionGated;
-wire [31:0] sp_attack_enable;
-
-// registers needed for assertions and state tracking
-reg [31:0] prev_epcr;
-reg [31:0] prev_eear;
-reg prev_sr0;
-reg [31:0] prev_esr;
-reg [31:0] prev_if_insn;
-reg [31:0] prev_id_freeze;
-reg [31:0] prev_ex_insn;
-
-
-always @(posedge clk) begin
-	prev_epcr <= epcr;
-	prev_eear <= eear;
-	prev_sr0 <= sr[0];
-	prev_esr <= esr;
-	prev_if_insn <= if_insn;
-	prev_id_freeze <= id_freeze;
-	prev_ex_insn <= ex_insn;
-end
-
-always @(posedge clk)begin
-  sp_assertion_violated_reg <= 1'b0;
-  
-   if(rst == `OR1200_RST_VALUE)begin
-      sp_assertions_violated_reg <= 1'b0;
-      sp_assertion_violated_reg <= 1'b0;
-   end
-   else if(sp_assertion_violated)begin
-      sp_assertions_violated_reg <= sp_assertions_violated;
-      sp_assertion_violated_reg <= sp_assertion_violated;
-   end
-end
-
-always @(posedge clk)begin
-   if(rst == `OR1200_RST_VALUE)
-     sp_exception_hold <= 1'b0;
-   else if(sp_exceptionHandled == 1'b1)
-     sp_exception_hold <= 1'b0;
-   else if(sp_assertion_violated == 1'b1)
-     sp_exception_hold <= 1'b1;
-end
-   
-// Signals needed for exception processing
-assign sp_exceptionHandled = (except_type == `OR1200_EXCEPT_ILLEGAL);   
-assign sp_exceptionGated = (sp_assertion_violated_reg | sp_exception_hold) & ~sp_exceptionHandled;
 
 //
 // Send exceptions to Debug Unit
@@ -485,7 +410,25 @@ assign mtspr_done = mtspr_dc_done;
 //
 assign sig_range = sr[`OR1200_SR_OV];
    
-   
+reg [31:0] prev_sr0;
+reg [31:0] prev_epcr;
+reg [31:0] prev_eear;
+reg [31:0] prev_ex_insn;
+reg [31:0] prev_if_insn;
+reg [31:0] prev_id_freeze;
+reg [31:0] prev_esr;
+reg [31:0] internalvalue;
+
+always @(posedge clk) begin
+	prev_sr0 <= or1200_sprs.sr[0];
+	prev_epcr <= or1200_except.epcr;
+	prev_eear <= or1200_except.eear;
+	prev_ex_insn <= or1200_ctrl.ex_insn;
+	prev_esr <= or1200_except.esr;
+	prev_if_insn <= or1200_if.if_insn;
+	prev_id_freeze <= or1200_id.id_freeze;
+	internalvalue <= internalvalue + 1;
+end   
    
 //
 // Instantiation of instruction fetch block
@@ -519,9 +462,8 @@ or1200_genpc #(.boot_adr(boot_adr)) or1200_genpc(
 	.genpc_freeze(genpc_freeze),
 	.no_more_dslot(no_more_dslot),
 	.lsu_stall(lsu_stall),
-	.ex_pc(ex_pc),			
-	.sp_epcr_ghost(sp_epcr_ghost)
-	, .sp_attack_enable(sp_attack_enable)
+	.du_flush_pipe(du_flush_pipe),
+	.spr_dat_npc(spr_dat_npc)
 );
 
 //
@@ -547,8 +489,7 @@ or1200_if or1200_if(
 	.rfe(rfe),
 	.except_itlbmiss(except_itlbmiss),
 	.except_immufault(except_immufault),
-	.except_ibuserr(except_ibuserr),
-	.sp_return_counter(sp_return_counter)
+	.except_ibuserr(except_ibuserr)
 );
 
 //
@@ -615,20 +556,12 @@ or1200_ctrl or1200_ctrl(
 	.du_hwbkpt(du_hwbkpt),
 	.except_illegal(except_illegal),
 	.dc_no_writethrough(dc_no_writethrough),
-	.sp_exception(sp_exceptionGated),
-	.sp_attack_enable(sp_attack_enable),
-	.sp_return_counter(sp_return_counter)
+	.du_flush_pipe(du_flush_pipe)
 );
 
 //
 // Instantiation of register file
 //
-
-wire attack_do = sp_attack_enable[4] & ((ex_insn & 32'hFFFF0000) == 32'h20000000);
-wire [31:0] attack_dataw = attack_do ? sr : rf_dataw;
-wire [4:0] attack_addrw = attack_do ? 5'd12 : rf_addrw;
-wire attack_we = attack_do ? 1'b1 : rfwb_op[0];
-
 or1200_rf or1200_rf(
 	.clk(clk),
 	.rst(rst),
@@ -636,10 +569,10 @@ or1200_rf or1200_rf(
 	.cy_we_o(cy_we_rf),
 	.supv(sr[`OR1200_SR_SM]),
 	.wb_freeze(wb_freeze),
-	.addrw(attack_addrw),
-	.dataw(attack_dataw),
+	.addrw(rf_addrw),
+	.dataw(rf_dataw),
 	.id_freeze(id_freeze),
-	.we(attack_we),
+	.we(rfwb_op[0]),
 	.flushpipe(wb_flushpipe),
 	.addra(rf_addra),
 	.rda(rf_rda),
@@ -653,13 +586,6 @@ or1200_rf or1200_rf(
 	.spr_dat_i(spr_dat_cpu),
 	.spr_dat_o(spr_dat_rf),
 	.du_read(du_read)
-	, .sp_attack_enable(sp_attack_enable)
-	, .gpr_written_to(gpr_written_to)
-	, .gpr_written_addr(gpr_written_addr)
-	, .gpr_written_data(gpr_written_data)
-	, .sp_exception_comb(sp_assertion_violated | sp_exceptionGated),
-	.sr(sr),
-	.ex_insn(ex_insn)
 );
 
 //
@@ -812,36 +738,18 @@ or1200_sprs or1200_sprs(
 	.pc_we(pc_we),
 	.epcr(epcr),
 	.eear(eear),
-	.esr(esr),	
+	.esr(esr),
 	.except_started(except_started),
-		
+
 	.fpcsr(fpcsr),
 	.fpcsr_we(fpcsr_we),			
 	.spr_dat_fpu(spr_dat_fpu),
-
+			
 	.sr_we(sr_we),
 	.to_sr(to_sr),
 	.sr(sr),
 	.branch_op(branch_op),
 	.dsx(dsx)
-
-	, .ex_pc(ex_pc),
-	.ex_void(ex_void),
-	.except_illegal(except_illegal | sp_exceptionGated),	
-	.sp_epcr_ghost_we(sp_epcr_ghost_we),
-	.sp_eear_ghost_we(sp_eear_ghost_we),
-	.sp_esr_ghost_we(sp_esr_ghost_we),			
-	.sp_epcr_ghost(sp_epcr_ghost),
-	.sp_eear_ghost(sp_eear_ghost),
-	.sp_esr_ghost(sp_esr_ghost),
-	.sp_address(sp_address),
-	.sp_data(sp_data),
-	.sp_strobe(sp_strobe),
-	.sp_assertions_violated(sp_assertions_violated_reg),
-	.sp_assertion_violated(sp_assertion_violated),
-	.sp_attack_enable(sp_attack_enable),
-	.sp_insn_is_exthz(sp_insn_is_exthz),
-	.id_freeze(id_freeze)
 );
 
 //
@@ -936,7 +844,7 @@ or1200_except or1200_except(
 	.rst(rst),
 	.sig_ibuserr(except_ibuserr),
 	.sig_dbuserr(except_dbuserr),
-	.sig_illegal(except_illegal | sp_exceptionGated),
+	.sig_illegal(except_illegal),
 	.sig_align(except_align),
 	.sig_range(sig_range),
 	.sig_dtlbmiss(except_dtlbmiss),
@@ -956,7 +864,7 @@ or1200_except or1200_except(
 	.dcpu_err_i(dcpu_err_i),
 	.genpc_freeze(genpc_freeze),
         .id_freeze(id_freeze),
-	.ex_freeze(ex_freeze),
+        .ex_freeze(ex_freeze),
         .wb_freeze(wb_freeze),
 	.if_stall(if_stall),
 	.if_pc(if_pc),
@@ -991,14 +899,6 @@ or1200_except or1200_except(
 	.eear(eear),
 	.esr(esr),
 
-	.sp_epcr_ghost_we(sp_epcr_ghost_we),
-	.sp_eear_ghost_we(sp_eear_ghost_we),
-	.sp_esr_ghost_we(sp_esr_ghost_we),
-	.sp_epcr_ghost(sp_epcr_ghost),
-	.sp_eear_ghost(sp_eear_ghost),
-	.sp_esr_ghost(sp_esr_ghost),
-	.sp_attack_enable(sp_attack_enable),
-
 	.lsu_addr(dcpu_adr_o),
 	.sr_we(sr_we),
 	.to_sr(to_sr),
@@ -1015,10 +915,4 @@ or1200_cfgr or1200_cfgr(
 	.spr_dat_o(spr_dat_cfgr)
 );
 
-wire [31:0] sp_assertions_violated_b;
-
-wire insn_clk = ~ex_void & ~ex_freeze & (ex_pc[31:27] == 5'b0);
-
-assign sp_assertions_violated = sp_assertions_violated_b; 
- 
 endmodule
