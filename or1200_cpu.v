@@ -1019,30 +1019,6 @@ wire [31:0] sp_assertions_violated_b;
 
 wire insn_clk = ~ex_void & ~ex_freeze & (ex_pc[31:27] == 5'b0);
 
-  BakedInAssertions bia(
-    .clk(clk),
-    .rst(sp_exceptionGated | rst),
-    .enable(insn_clk),
-    .ex_pc(ex_pc),
-    .ex_insn(ex_insn), 
-    .spr_dat_ppc(spr_dat_ppc),
-    .spr_dat_npc(spr_dat_npc),
-    .eear(eear),
-    .sr(sr),
-    .esr(esr),
-    .epcr(epcr),
-    .immu_sxe(immu_sxe),
-    .immu_uxe(immu_uxe),
-    .immu_en(immu_en),	
-    .gpr_written_to(gpr_written_to),
-    .gpr_written_addr(gpr_written_addr),
-    .gpr_written_data(gpr_written_data),
-    .dcpu_adr_o(dcpu_adr_o),
-    .dcpu_dat_i(dcpu_dat_i),
-    .operand_b(operand_b),
-    .checkersFired(sp_assertions_violated_b)
-  );
-
-  assign sp_assertions_violated = sp_assertions_violated_b; 
+assign sp_assertions_violated = sp_assertions_violated_b; 
  
 endmodule
