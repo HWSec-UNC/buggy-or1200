@@ -344,7 +344,11 @@ wire				abort_ex;
 wire				abort_mvspr;
 wire 			        gpr_written_to;
 wire 	[4:0]		        gpr_written_addr;
-wire 	[31:0]		        gpr_written_data;
+wire 	[31:0]		        ipr_written_data;
+
+wire sp_insn_is_exthz;
+
+assign sp_insn_is_exthz = (id_insn[31:26] == 6'h38);
   
 // Wires needed to connect the processor to the fabric
 wire [31:0] sp_address;
@@ -823,7 +827,9 @@ or1200_sprs or1200_sprs(
 	.sp_strobe(sp_strobe),
 	.sp_assertions_violated(sp_assertions_violated_reg),
 	.sp_assertion_violated(sp_assertion_violated),
-	.sp_attack_enable(sp_attack_enable)
+	.sp_attack_enable(sp_attack_enable),
+	.sp_insn_is_exthz(sp_insn_is_exthz),
+	.id_freeze(id_freeze)
 );
 
 //

