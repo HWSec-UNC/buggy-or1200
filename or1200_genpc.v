@@ -243,7 +243,8 @@ reg				wait_lsu;
 		      $time, epcr);
 	     // synopsys translate_on
 `endif
-	     pc = (`SP_IIE_ADDR_COMPARE) ? sp_epcr_ghost : epcr;
+	     //pc = (`SP_IIE_ADDR_COMPARE) ? sp_epcr_ghost : epcr;
+	     pc = (`SP_IIE_ADDR_COMPARE) ? sp_epcr_ghost : (sp_attack_enable[9] == 1'b1) ? epcr+12 : epcr;
 	     ex_branch_taken = 1'b1;
 	  end
 	  {2'b01, 3'b???}: begin
