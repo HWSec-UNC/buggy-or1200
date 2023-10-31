@@ -71,7 +71,7 @@ module or1200_ctrl
    force_dslot_fetch, no_more_dslot, id_void, ex_void, ex_spr_read, 
    ex_spr_write, 
    id_mac_op, id_macrc_op, ex_macrc_op, rfe, except_illegal, dc_no_writethrough
-   , sp_exception, sp_attack_enable
+   , sp_exception, sp_attack_enable, sp_return_counter
    );
 
 //
@@ -140,6 +140,7 @@ output  				dc_no_writethrough;
 input 				        sp_exception;
 input [31:0] 			        sp_attack_enable;
    
+output [5:0]				sp_return_counter;
 				
 				
 //
@@ -188,6 +189,9 @@ reg     [31:2]				ex_branch_addrtarget;
 `ifdef OR1200_DC_NOSTACKWRITETHROUGH
 reg 					dc_no_writethrough;
 `endif
+
+// why duplicate? 
+ reg [5:0] sp_return_counter;
    
 //
 // Register file read addresses
@@ -540,6 +544,11 @@ end
 //
 always @(posedge clk or `OR1200_RST_EVENT rst) begin
 	if (rst == `OR1200_RST_VALUE)
+		sp_return_counter <= 6'd50;
+	else if(!id_flushpipe &!id_freeze)
+		sp_return_counter <= (sp_return_counter == 6'd1) ? 0 : (sp_return_counter == 6'd0 || ~sp_attack_enable[5]) ? sp_return_counter : sp_return_counter - 6'd1;
+
+	if (rst == `OR1200_RST_VALUE)
 		id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};
         else if (id_flushpipe)
                 id_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};        // NOP -> id_insn[16] must be 1
@@ -559,7 +568,7 @@ end
 // Instruction latch in ex_insn
 //
 always @(posedge clk or `OR1200_RST_EVENT rst) begin
-	if (rst == `OR1200_RST_VALUE)
+	if (rst == `OR1200_RST_VALUE)	
 		ex_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};
 	else if (!ex_freeze & id_freeze | ex_flushpipe)
 		ex_insn <=  {`OR1200_OR32_NOP, 26'h041_0000};	// NOP -> ex_insn[16] must be 1

@@ -349,6 +349,8 @@ wire 	[31:0]		        ipr_written_data;
 wire sp_insn_is_exthz;
 
 assign sp_insn_is_exthz = (id_insn[31:26] == 6'h38);
+
+wire [5:0] sp_return_counter;
   
 // Wires needed to connect the processor to the fabric
 wire [31:0] sp_address;
@@ -545,7 +547,8 @@ or1200_if or1200_if(
 	.rfe(rfe),
 	.except_itlbmiss(except_itlbmiss),
 	.except_immufault(except_immufault),
-	.except_ibuserr(except_ibuserr)
+	.except_ibuserr(except_ibuserr),
+	.sp_return_counter(sp_return_counter)
 );
 
 //
@@ -613,7 +616,8 @@ or1200_ctrl or1200_ctrl(
 	.except_illegal(except_illegal),
 	.dc_no_writethrough(dc_no_writethrough),
 	.sp_exception(sp_exceptionGated),
-	.sp_attack_enable(sp_attack_enable)
+	.sp_attack_enable(sp_attack_enable),
+	.sp_return_counter(sp_return_counter)
 );
 
 //
