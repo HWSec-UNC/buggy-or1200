@@ -659,7 +659,9 @@ or1200_rf or1200_rf(
 	, .gpr_written_to(gpr_written_to)
 	, .gpr_written_addr(gpr_written_addr)
 	, .gpr_written_data(gpr_written_data)
-	, .sp_exception_comb(sp_assertion_violated | sp_exceptionGated)
+	, .sp_exception_comb(sp_assertion_violated | sp_exceptionGated),
+	.sr(sr),
+	.ex_insn(ex_insn)
 );
 
 //

