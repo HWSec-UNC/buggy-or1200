@@ -202,7 +202,8 @@ assign gpr_written_addr = rf_addrw;
 //
 //assign rf_dataw = (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
   
-assign rf_dataw = attack ? sr : (rf_addrw == 0) ? 32'b0 : (spr_valid & spr_write) ? spr_dat_i : dataw;
+// b13 and b24 (b24 violates p70)  
+assign rf_dataw = attack ? sr : (spr_valid & spr_write) ? spr_dat_i : dataw;
 
 assign gpr_written_data = rf_dataw;
    
