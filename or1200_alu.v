@@ -252,7 +252,9 @@ always @(alu_op or alu_op2 or a or b or result_sum or result_and or macrc_op
 		                result = extended;
 		end
 		`OR1200_ALUOP_EXTW  : begin
-		                result = a;
+						// b17 l.extw instructions behave incorrectly
+		                // result = a;
+						result = extended;
 		end		
 `endif     
 		`OR1200_ALUOP_MOVHI : begin
