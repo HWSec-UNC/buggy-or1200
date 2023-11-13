@@ -823,7 +823,7 @@ or1200_sprs or1200_sprs(
 	.to_sr(to_sr),
 	.sr(sr),
 	.branch_op(branch_op),
-	.dsx(dsx)
+	// .dsx(dsx) bug 18
 
 	, .ex_pc(ex_pc),
 	.ex_void(ex_void),
@@ -1003,8 +1003,8 @@ or1200_except or1200_except(
 	.sr_we(sr_we),
 	.to_sr(to_sr),
 	.sr(sr),
-	.abort_ex(abort_ex),
-	.dsx(dsx)
+	.abort_ex(abort_ex)
+	// .dsx(dsx) bug 18
 );
 
 //
