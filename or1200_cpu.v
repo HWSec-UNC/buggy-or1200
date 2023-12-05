@@ -825,7 +825,7 @@ or1200_sprs or1200_sprs(
 	.branch_op(branch_op),
 	// .dsx(dsx) bug 18
 
-	, .ex_pc(ex_pc),
+	.ex_pc(ex_pc),
 	.ex_void(ex_void),
 	.except_illegal(except_illegal | sp_exceptionGated),	
 	.sp_epcr_ghost_we(sp_epcr_ghost_we),
