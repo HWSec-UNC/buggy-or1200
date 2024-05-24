@@ -355,13 +355,13 @@ module or1200_sprs(
 
 	  // = (except_started) ? {sr[`OR1200_SR_FO:`OR1200_SR_EPH],dsx,1'b0} : bug 18
     assign to_sr[`OR1200_SR_FO:`OR1200_SR_OVE] 
-      = (except_started) ? {sr[`OR1200_SR_FO:`OR1200_SR_EPH],1'b0} : bug 18
+      = (except_started) ? {sr[`OR1200_SR_FO:`OR1200_SR_EPH],1'b0} :
 	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
 	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_FO:`OR1200_SR_OVE] : esr[`OR1200_SR_FO:`OR1200_SR_OVE] : (spr_we && sr_sel) ? 
 	      {1'b1, spr_dat_o[`OR1200_SR_FO-1:`OR1200_SR_OVE]} :
 	      sr[`OR1200_SR_FO:`OR1200_SR_OVE];
    assign to_sr[`OR1200_SR_TED] 
-	    = (except_started) ? 1'b1 :x
+	    = (except_started) ? 1'b1 :
 	      (branch_op == `OR1200_BRANCHOP_RFE) ? 
 	      (`SP_IIE_ADDR_COMPARE) ? sp_esr_ghost[`OR1200_SR_TED] : esr[`OR1200_SR_TED] :
 	      (spr_we && sr_sel) ? spr_dat_o[`OR1200_SR_TED] :
